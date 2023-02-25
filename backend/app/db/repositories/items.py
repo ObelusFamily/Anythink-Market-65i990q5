@@ -1,3 +1,8 @@
+import openai
+import os
+
+from loguru import logger
+
 from typing import List, Optional, Sequence, Union
 
 from asyncpg import Connection, Record
@@ -30,6 +35,12 @@ class ItemsRepository(BaseRepository):  # noqa: WPS214
         super().__init__(conn)
         self._profiles_repo = ProfilesRepository(conn)
         self._tags_repo = TagsRepository(conn)
+        openai.api_key = os.getenv("OPENAI_API_KEY")
+
+    def get_dalle_image(self, title):
+        response = openai.Image.create(prompt=title, n=1, size="256x256")
+        image = response['data'][0]['url']
+        return image
 
     async def create_item(  # noqa: WPS211
         self,
@@ -43,6 +54,10 @@ class ItemsRepository(BaseRepository):  # noqa: WPS214
         tags: Optional[Sequence[str]] = None,
     ) -> Item:
         async with self.connection.transaction():
+            if not image:
+                logger.debug("No image, calling openai api")
+                image = self.get_dalle_image(title)
+
             item_row = await queries.create_new_item(
                 self.connection,
                 slug=slug,
